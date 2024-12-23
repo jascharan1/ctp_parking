@@ -44,30 +44,30 @@ const LocationPage = () => {
 
   const mapRef = useRef(null);
   const markersLayer = useRef(null);
-  const socketRef = useRef(null); // Declare socketRef here
+  const socketRef = useRef(null);
 
-  // Initialize Socket.IO
+  // Socket.IO Initialization
   useEffect(() => {
-    const socket = io("http://localhost:3000"); // Backend Socket.IO server URL
-    socketRef.current = socket; // Assign socket to socketRef
+    const socket = io();
+    socketRef.current = socket;
 
-    // Register the user ID to the socket
     const token = localStorage.getItem("authToken");
     if (token) {
-      const userId = JSON.parse(atob(token.split(".")[1])).id; // Decode JWT to get user ID
-      socket.emit("registerUser", userId); // Emit the registered user ID to the backend
+      const userId = JSON.parse(atob(token.split(".")[1])).id;
+      socket.emit("registerUser", userId);
     }
 
-    // Listen for parking space claimed notifications
     socket.on("parkingClaimed", (data) => {
-      alert(data.message); // Display notification to the offering user
+      alert(data.message);
+      fetchAvailableLocations(); // Refresh locations when a spot is claimed
     });
 
-    // Cleanup socket connection on unmount
     return () => {
       socket.disconnect();
     };
   }, []);
+
+  // Get Current Location
   useEffect(() => {
     const token = localStorage.getItem("authToken");
     if (!token) {
@@ -84,13 +84,12 @@ const LocationPage = () => {
             longitude: position.coords.longitude,
           };
           setCurrentLocation(location);
+          fetchAvailableLocations(); // Fetch locations after getting current location
           setLoading(false);
         },
         (err) => {
           console.error("Error obtaining location:", err);
-          setError(
-            "Failed to get your location. Please enable location services."
-          );
+          setError("Failed to get your location. Please enable location services.");
           setLoading(false);
         }
       );
@@ -100,6 +99,7 @@ const LocationPage = () => {
     }
   }, []);
 
+  // Map Initialization
   useEffect(() => {
     if (currentLocation && mapRef.current) {
       const map = new Map({
@@ -127,8 +127,9 @@ const LocationPage = () => {
       marker.setStyle(
         new Style({
           image: new Icon({
-            src: "https://cdn-icons-png.flaticon.com/512/684/684908.png",
+            src: "https://cdn.jsdelivr.net/npm/heroicons/24/solid/map-pin.svg",
             scale: 0.05,
+            color: "blue"
           }),
         })
       );
@@ -155,13 +156,13 @@ const LocationPage = () => {
               locationId: feature.get("locationId"),
               userId: feature.get("userId"),
             });
-            
           }
         });
       });
     }
   }, [currentLocation]);
 
+  // Update Markers on Map
   const updateMarkers = (locations) => {
     const features = locations.map((location) => {
       const marker = new Feature({
@@ -172,9 +173,9 @@ const LocationPage = () => {
       marker.setStyle(
         new Style({
           image: new Icon({
-            src: "https://cdn-icons-png.flaticon.com/512/684/684908.png",
+            src: "https://cdn.jsdelivr.net/npm/heroicons/24/solid/map-pin.svg",
             scale: 0.05,
-            color: "#FF0000",
+            color: "red"
           }),
         })
       );
@@ -193,9 +194,11 @@ const LocationPage = () => {
       markersLayer.current.getSource().addFeatures(features);
     }
   };
+
+  // Offer Parking Spot
   const offerParking = async () => {
     try {
-      const response = await fetch("http://localhost:3000/locations/offer", {
+      const response = await fetch("/locations/offer", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -220,26 +223,23 @@ const LocationPage = () => {
       alert("Failed to offer parking spot.");
     }
   };
+
+  // Claim Parking Spot
   const claimParking = async (locationId) => {
-   
     try {
-      
-      const response = await fetch("http://localhost:3000/locations/claim", {
-        
+      const response = await fetch("/locations/claim", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${localStorage.getItem("authToken")}`,
         },
         body: JSON.stringify({ locationId }),
-        
       });
-      
 
       const data = await response.json();
       if (response.ok) {
         alert("Parking spot claimed successfully!");
-        fetchAvailableLocations(); // Refresh available locations
+        fetchAvailableLocations();
       } else {
         alert(`Error: ${data.error}`);
       }
@@ -249,50 +249,59 @@ const LocationPage = () => {
     }
   };
 
+  // Fetch Available Locations
   const fetchAvailableLocations = async () => {
     try {
-      const response = await fetch(
-        "http://localhost:3000/locations/available",
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("authToken")}`,
-          },
-        }
-      );
-      const data = await response.json();
-      if (response.ok) {
-        setAvailableLocations(data);
-        updateMarkers(data);
-      } else {
-        console.error(data.error);
+      const response = await fetch("/locations/available", {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch available locations');
       }
+      
+      const data = await response.json();
+      setAvailableLocations(data);
+      updateMarkers(data);
     } catch (err) {
       console.error("Error fetching locations:", err);
+      setError("Failed to fetch available parking spots");
     }
   };
 
   if (loading) {
-    return <div>Loading...</div>;
+    return <div style={styles.loadingContainer}>Loading...</div>;
   }
 
   if (error) {
-    return <div>Error: {error}</div>;
+    return <div style={styles.errorContainer}>Error: {error}</div>;
   }
-  
 
   return (
     <div>
+      <div 
+        ref={mapRef} 
+        style={{ 
+          width: "100%", 
+          height: "400px", 
+          marginTop: "2vh", 
+          marginLeft: "2vh", 
+          marginRight: "10vh"
+        }} 
+      />
       
-      <div ref={mapRef} style={{ width: "100%", height: "400px" , marginTop: "2vh", marginLeft: "2vh", marginRight: "10vh"}} />
       {popupData && (
         <Popup
           coordinates={popupData}
-          locationId={location}
+          locationId={popupData.locationId}
           fetchAvailableLocations={fetchAvailableLocations}
-          claimParking={() => claimParking(null)}
+          claimParking={() => claimParking(popupData.locationId)}
           onClose={() => setPopupData(null)}
         />
       )}
+      
       <div style={styles.buttonContainer}>
         <button style={styles.actionButton} onClick={fetchAvailableLocations}>
           Find Nearby Parking
@@ -301,35 +310,40 @@ const LocationPage = () => {
           Leave Parking
         </button>
       </div>
+      
       {availableLocations.length > 0 && (
-        <div>
+        <div style={{ padding: "20px" }}>
           <h2>Available Parking Spots:</h2>
-        
-          <ul>
-        
+          <ul style={{ listStyleType: 'none', padding: 0 }}>
             {availableLocations.map((location) => (
-              <li key={location._id}>
-              
-                <h1>User Offering: <FetchUsername userId={location.offeredBy} /></h1>
-              
-                <button
-                  onClick={() => claimParking(location._id)}
-                  style={styles.claimButton}
-                >
-                  Claim Spot 
-                </button>
-             
+              <li 
+                key={location._id} 
+                style={{ 
+                  marginBottom: "10px", 
+                  padding: "10px", 
+                  border: "1px solid #ddd", 
+                  borderRadius: "5px" 
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>
+                    Offered by: <FetchUsername userId={location.offeredBy} />
+                  </span>
+                  <button
+                    onClick={() => claimParking(location._id)}
+                    style={styles.claimButton}
+                  >
+                    Claim Spot
+                  </button>
+                </div>
               </li>
             ))}
-           
           </ul>
-        
         </div>
       )}
     </div>
   );
 };
-
 function App() {
   return (
     <Router>

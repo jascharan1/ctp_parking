@@ -5,7 +5,7 @@ const Popup = ({ coordinates, onClose ,location,fetchAvailableLocations}) => {
   const claimParking = async (locationId) => {
     try {
      
-      const response = await fetch("http://localhost:3000/locations/claim", {
+      const response = await fetch("/locations/claim/", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -19,6 +19,10 @@ const Popup = ({ coordinates, onClose ,location,fetchAvailableLocations}) => {
         alert("Parking spot claimed successfully!");
         fetchAvailableLocations();
         onClose();
+       if (coordinates.latitude && coordinates.longitude) {
+          const googleMapsUrl = `https://www.google.com/maps?q=${coordinates.latitude},${coordinates.longitude}`;
+          window.open(googleMapsUrl, '_blank');
+        }
       } else {
         alert(`Error: ${data.error}`);
       }
